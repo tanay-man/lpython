@@ -2493,13 +2493,22 @@ public:
         return false;
     }
 
-    bool is_dataclass(AST::expr_t** decorators, size_t n,
-        ASR::expr_t*& aligned_expr, bool& is_packed) {
+    bool is_dataclass(AST::expr_t** decorators, size_t n) {
         bool is_dataclass_ = false;
         for( size_t i = 0; i < n; i++ ) {
             if( AST::is_a<AST::Name_t>(*decorators[i]) ) {
                 AST::Name_t* dc_name = AST::down_cast<AST::Name_t>(decorators[i]);
                 is_dataclass_ = std::string(dc_name->m_id) == "dataclass";
+            } 
+        }
+        return is_dataclass_;
+    }
+
+    void get_alignment(AST::expr_t** decorators, size_t n,
+        ASR::expr_t*& aligned_expr, bool& is_packed) {
+        for( size_t i = 0; i < n; i++ ) {
+            if( AST::is_a<AST::Name_t>(*decorators[i]) ) {
+                AST::Name_t* dc_name = AST::down_cast<AST::Name_t>(decorators[i]);
                 is_packed = is_packed || std::string(dc_name->m_id) == "packed";
             } else if( AST::is_a<AST::Call_t>(*decorators[i]) ) {
                 AST::Call_t* dc_call = AST::down_cast<AST::Call_t>(decorators[i]);
@@ -2531,9 +2540,7 @@ public:
                 }
             }
         }
-
-        return is_dataclass_;
-    }
+        }
 
     bool is_enum(AST::expr_t** bases, size_t n) {
         if( n != 1 ) {
@@ -2926,8 +2933,18 @@ public:
     void visit_ClassMembers(const AST::ClassDef_t& x,
         Vec<char*>& member_names, SetChar& struct_dependencies,
         Vec<ASR::call_arg_t> &member_init,
-        bool is_enum_scope=false, ASR::abiType abi=ASR::abiType::Source) {
+        bool is_enum_scope=false, ASR::abiType abi=ASR::abiType::Source,
+        bool is_class_scope=false, bool is_generating_body=false) {
         int64_t prev_value = 1;
+        if(is_class_scope && is_generating_body){
+            for( size_t i = 0; i < x.n_body; i++ ){
+                if ( AST::is_a<AST::FunctionDef_t>(*x.m_body[i]) ){
+                    //generating function body 
+                    this->visit_stmt(*x.m_body[i]);
+                }
+            return;
+            }
+        }
         for( size_t i = 0; i < x.n_body; i++ ) {
             if (AST::is_a<AST::Expr_t>(*x.m_body[i])) {
                 AST::Expr_t* expr = AST::down_cast<AST::Expr_t>(x.m_body[i]);
@@ -2942,7 +2959,12 @@ public:
                 visit_ClassDef(*AST::down_cast<AST::ClassDef_t>(x.m_body[i]));
                 continue;
             } else if ( AST::is_a<AST::FunctionDef_t>(*x.m_body[i]) ) {
-                throw SemanticError("Struct member functions are not supported", x.m_body[i]->base.loc);
+                if (!is_class_scope)
+                    throw SemanticError("Struct member functions are not supported", x.m_body[i]->base.loc);
+                else{
+                    this->visit_stmt(*x.m_body[i]);
+                }
+                continue;
             } else if (AST::is_a<AST::Pass_t>(*x.m_body[i])) {
                 continue;
             } else if (!AST::is_a<AST::AnnAssign_t>(*x.m_body[i])) {
@@ -3030,6 +3052,7 @@ public:
 
     void visit_ClassDef(const AST::ClassDef_t& x) {
         std::string x_m_name = x.m_name;
+        bool is_generating_body = false;
         if( is_enum(x.m_bases, x.n_bases) ) {
             if( current_scope->resolve_symbol(x_m_name) ) {
                 return ;
@@ -3147,49 +3170,78 @@ public:
                 current_scope->add_symbol(x_m_name, union_type);
             }
             return ;
-        }
-        ASR::expr_t* algined_expr = nullptr;
-        bool is_packed = false;
-        if( !is_dataclass(x.m_decorator_list, x.n_decorator_list,
-                          algined_expr, is_packed) ) {
-            throw SemanticError("Only dataclass-decorated classes and Enum subclasses are supported.",
-                                x.base.base.loc);
-        }
-
-        if( x.n_bases > 0 ) {
-            throw SemanticError("Inheritance in classes isn't supported yet.",
-                                x.base.base.loc);
-        }
-
-        SymbolTable *parent_scope = current_scope;
-        current_scope = al.make_new<SymbolTable>(parent_scope);
-        Vec<char*> member_names;
-        Vec<ASR::call_arg_t> member_init;
-        member_names.reserve(al, x.n_body);
-        member_init.reserve(al, x.n_body);
-        SetChar struct_dependencies;
-        struct_dependencies.reserve(al, 1);
-        ASR::abiType class_abi = ASR::abiType::Source;
-        if( is_bindc_class(x.m_decorator_list, x.n_decorator_list) ) {
-            class_abi = ASR::abiType::BindC;
-        }
-        visit_ClassMembers(x, member_names, struct_dependencies, member_init, false, class_abi);
-        LCOMPILERS_ASSERT(member_init.size() == member_names.size());
-        ASR::symbol_t* class_type = ASR::down_cast<ASR::symbol_t>(ASR::make_StructType_t(al,
-                                        x.base.base.loc, current_scope, x.m_name,
-                                        struct_dependencies.p, struct_dependencies.size(),
-                                        member_names.p, member_names.size(),
-                                        class_abi, ASR::accessType::Public,
-                                        is_packed, false, member_init.p, member_init.size(), algined_expr,
-                                        nullptr));
-        current_scope = parent_scope;
-        if (current_scope->resolve_symbol(x_m_name)) {
-            ASR::symbol_t* sym = current_scope->resolve_symbol(x_m_name);
-            ASR::StructType_t *st = ASR::down_cast<ASR::StructType_t>(sym);
-            st->m_initializers = member_init.p;
-            st->n_initializers = member_init.size();
-        } else {
-            current_scope->add_symbol(x_m_name, class_type);
+        } else if( is_dataclass(x.m_decorator_list, x.n_decorator_list) ){
+            ASR::expr_t* algined_expr = nullptr;
+            bool is_packed = false;
+            if( x.n_bases > 0 ) {
+                throw SemanticError("Inheritance in classes isn't supported yet.",
+                                    x.base.base.loc);
+            }
+            get_alignment(x.m_decorator_list, x.n_decorator_list,
+                            algined_expr, is_packed);
+            SymbolTable *parent_scope = current_scope;
+            current_scope = al.make_new<SymbolTable>(parent_scope);
+            Vec<char*> member_names;
+            Vec<ASR::call_arg_t> member_init;
+            member_names.reserve(al, x.n_body);
+            member_init.reserve(al, x.n_body);
+            SetChar struct_dependencies;
+            struct_dependencies.reserve(al, 1);
+            ASR::abiType class_abi = ASR::abiType::Source;
+            if( is_bindc_class(x.m_decorator_list, x.n_decorator_list) ) {
+                class_abi = ASR::abiType::BindC;
+            }
+            visit_ClassMembers(x, member_names, struct_dependencies, member_init, false, class_abi);
+            LCOMPILERS_ASSERT(member_init.size() == member_names.size());
+            ASR::symbol_t* class_type = ASR::down_cast<ASR::symbol_t>(ASR::make_StructType_t(al,
+                                            x.base.base.loc, current_scope, x.m_name,
+                                            struct_dependencies.p, struct_dependencies.size(),
+                                            member_names.p, member_names.size(),
+                                            class_abi, ASR::accessType::Public,
+                                            is_packed, false, member_init.p, member_init.size(), algined_expr,
+                                            nullptr));
+            current_scope = parent_scope;
+            if (current_scope->resolve_symbol(x_m_name)) {
+                ASR::symbol_t* sym = current_scope->resolve_symbol(x_m_name);
+                ASR::StructType_t *st = ASR::down_cast<ASR::StructType_t>(sym);
+                st->m_initializers = member_init.p;
+                st->n_initializers = member_init.size();
+            } else {
+                current_scope->add_symbol(x_m_name, class_type);
+            }
+        } else{
+            SymbolTable *parent_scope = current_scope;
+            ASR::symbol_t* clss_sym = current_scope->get_symbol(x_m_name);
+            ASR::ClassType_t* clss = nullptr;
+            if (clss_sym != nullptr){
+                clss = ASR::down_cast<ASR::ClassType_t>(clss_sym);
+                current_scope = clss->m_symtab;
+                is_generating_body = true;
+            } else{
+                current_scope = al.make_new<SymbolTable>(parent_scope);
+            }
+            Vec<char*> member_names;
+            Vec<ASR::call_arg_t> member_init;
+            member_names.reserve(al, x.n_body);
+            member_init.reserve(al, x.n_body);
+            SetChar struct_dependencies;
+            struct_dependencies.reserve(al, 1);
+            ASR::abiType class_abi = ASR::abiType::Source;
+            if( is_bindc_class(x.m_decorator_list, x.n_decorator_list) ) {
+                class_abi = ASR::abiType::BindC;
+            }
+            visit_ClassMembers(x, member_names, struct_dependencies, member_init, false, class_abi, true, is_generating_body);
+            LCOMPILERS_ASSERT(member_init.size() == member_names.size());
+            ASR::symbol_t* class_type = ASR::down_cast<ASR::symbol_t>(ASR::make_ClassType_t(al,
+                                            x.base.base.loc, current_scope, x.m_name,
+                                            class_abi, ASR::accessType::Public
+                                            ));
+            current_scope = parent_scope;
+            if (clss_sym == nullptr){
+                current_scope->add_symbol(x_m_name, class_type);
+            } else{
+                clss->m_symtab->asr_owner = &clss_sym->base;
+            }
         }
     }
 
