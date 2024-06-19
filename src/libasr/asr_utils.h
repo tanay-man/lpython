@@ -834,6 +834,9 @@ static inline SymbolTable *symbol_symtab(const ASR::symbol_t *f)
         case ASR::symbolType::Template: {
             return ASR::down_cast<ASR::Template_t>(f)->m_symtab;
         }
+        case ASR::symbolType::ClassType:{
+            return ASR::down_cast<ASR::ClassType_t>(f)->m_symtab;
+        }
         default : throw LCompilersException("Not implemented");
     }
 }

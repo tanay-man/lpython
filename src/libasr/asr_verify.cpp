@@ -419,6 +419,28 @@ public:
         }
     }
 
+    void visit_ClassType(const ClassType_t &x){
+        SymbolTable *parent_symtab = current_symtab;
+        current_symtab = x.m_symtab;
+        require(x.m_name != nullptr,
+            "The ClassType::m_name cannot be nullptr");
+        require(x.m_symtab != nullptr,
+            "The ClassType::m_symtab cannot be nullptr");
+        require(x.m_symtab->parent == parent_symtab,
+            "The ClassType::m_symtab->parent is not the right parent");
+        require(x.m_symtab->asr_owner == (ASR::asr_t*)&x,
+            "The X::m_symtab::asr_owner must point to X");
+        require(id_symtab_map.find(x.m_symtab->counter) == id_symtab_map.end(),
+            "ClassType::m_symtab->counter must be unique");
+        require(ASRUtils::symbol_symtab(down_cast<symbol_t>(current_symtab->asr_owner)) == current_symtab,
+            "The asr_owner invariant failed");
+        id_symtab_map[x.m_symtab->counter] = x.m_symtab;
+        std::vector<std::string> struct_dependencies;
+        for (auto &a : x.m_symtab->get_scope()) {
+            this->visit_symbol(*a.second);
+        }
+    }
+
     void visit_Function(const Function_t &x) {
         ASR::FunctionType_t* x_func_type = ASR::down_cast<ASR::FunctionType_t>(x.m_function_signature);
         if (x_func_type->m_abi == abiType::Interactive) {

@@ -2959,9 +2959,9 @@ public:
                 visit_ClassDef(*AST::down_cast<AST::ClassDef_t>(x.m_body[i]));
                 continue;
             } else if ( AST::is_a<AST::FunctionDef_t>(*x.m_body[i]) ) {
-                if (!is_class_scope)
+                if (!is_class_scope) {
                     throw SemanticError("Struct member functions are not supported", x.m_body[i]->base.loc);
-                else{
+                } else {
                     this->visit_stmt(*x.m_body[i]);
                 }
                 continue;
@@ -3052,7 +3052,6 @@ public:
 
     void visit_ClassDef(const AST::ClassDef_t& x) {
         std::string x_m_name = x.m_name;
-        bool is_generating_body = false;
         if( is_enum(x.m_bases, x.n_bases) ) {
             if( current_scope->resolve_symbol(x_m_name) ) {
                 return ;
@@ -3209,16 +3208,19 @@ public:
             } else {
                 current_scope->add_symbol(x_m_name, class_type);
             }
+            return;
         } else{
             SymbolTable *parent_scope = current_scope;
             ASR::symbol_t* clss_sym = current_scope->get_symbol(x_m_name);
             ASR::ClassType_t* clss = nullptr;
-            if (clss_sym != nullptr){
+            bool is_class_scope = true;
+            bool is_generating_body = false;
+            if (clss_sym == nullptr){
+                current_scope = al.make_new<SymbolTable>(parent_scope);
+            } else{
                 clss = ASR::down_cast<ASR::ClassType_t>(clss_sym);
                 current_scope = clss->m_symtab;
                 is_generating_body = true;
-            } else{
-                current_scope = al.make_new<SymbolTable>(parent_scope);
             }
             Vec<char*> member_names;
             Vec<ASR::call_arg_t> member_init;
@@ -3230,7 +3232,8 @@ public:
             if( is_bindc_class(x.m_decorator_list, x.n_decorator_list) ) {
                 class_abi = ASR::abiType::BindC;
             }
-            visit_ClassMembers(x, member_names, struct_dependencies, member_init, false, class_abi, true, is_generating_body);
+            visit_ClassMembers(x, member_names, struct_dependencies, member_init, false, class_abi,
+                                is_class_scope, is_generating_body);
             LCOMPILERS_ASSERT(member_init.size() == member_names.size());
             ASR::symbol_t* class_type = ASR::down_cast<ASR::symbol_t>(ASR::make_ClassType_t(al,
                                             x.base.base.loc, current_scope, x.m_name,
@@ -4508,7 +4511,6 @@ public:
             }
         } else {
             bool is_pure = false, is_module = false;
-
             // This checks for internal function defintions as well.
             for (size_t i = 0; i < x.n_body; i++) {
                 visit_stmt(*x.m_body[i]);
