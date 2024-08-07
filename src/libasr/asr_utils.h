@@ -2451,6 +2451,16 @@ static inline bool is_aggregate_type(ASR::ttype_t* asr_type) {
 static inline ASR::dimension_t* duplicate_dimensions(Allocator& al, ASR::dimension_t* m_dims, size_t n_dims);
 
 static inline ASR::asr_t* make_StructType_t_util(Allocator& al, Location loc, ASR::symbol_t* der){
+    if (ASRUtils::symbol_get_past_external(der) == nullptr) {
+         return ASR::make_StructType_t(al, 
+                                loc, 
+                                nullptr, 
+                                0,
+                                nullptr, //Correct this when mem fn added to Struct_t
+                                0,       //Correct this when mem fn added to Struct_t
+                                true,    //Correct this when mem fn added to Struct_t
+                                der);
+    }
     ASR::Struct_t* st = ASR::down_cast<ASR::Struct_t>(ASRUtils::symbol_get_past_external(der));
     Vec<ASR::ttype_t*> members;
     members.reserve(al, 1);
