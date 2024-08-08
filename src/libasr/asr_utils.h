@@ -2456,9 +2456,9 @@ static inline ASR::asr_t* make_StructType_t_util(Allocator& al, Location loc, AS
                                 loc, 
                                 nullptr, 
                                 0,
-                                nullptr, //Correct this when mem fn added to Struct_t
-                                0,       //Correct this when mem fn added to Struct_t
-                                true,    //Correct this when mem fn added to Struct_t
+                                nullptr, 
+                                0,       
+                                true,    
                                 der);
     }
     ASR::Struct_t* st = ASR::down_cast<ASR::Struct_t>(ASRUtils::symbol_get_past_external(der));
