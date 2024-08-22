@@ -54,6 +54,7 @@
 #include <libasr/pass/replace_print_struct_type.h>
 #include <libasr/pass/promote_allocatable_to_nonallocatable.h>
 #include <libasr/pass/replace_function_call_in_declaration.h>
+#include <libasr/pass/visit_runtime_polymorphism.h>
 #include <libasr/pass/python_bind.h>
 #include <libasr/codegen/asr_to_fortran.h>
 #include <libasr/asr_verify.h>
@@ -113,7 +114,8 @@ namespace LCompilers {
             {"print_struct_type", &pass_replace_print_struct_type},
             {"unique_symbols", &pass_unique_symbols},
             {"insert_deallocate", &pass_insert_deallocate},
-            {"promote_allocatable_to_nonallocatable", &pass_promote_allocatable_to_nonallocatable}
+            {"promote_allocatable_to_nonallocatable", &pass_promote_allocatable_to_nonallocatable},
+            {"runtime_polymorphism", &pass_add_vtable}
         };
 
         bool apply_default_passes;
@@ -239,6 +241,7 @@ namespace LCompilers {
                 "unused_functions",
                 "unique_symbols",
                 "insert_deallocate",
+                "runtime_polymorphism"
             };
 
             _with_optimization_passes = {
@@ -279,6 +282,7 @@ namespace LCompilers {
                 "unique_symbols",
                 "insert_deallocate",
                 "promote_allocatable_to_nonallocatable"
+                "runtime_polymorphism"
             };
 
             // These are re-write passes which are already handled

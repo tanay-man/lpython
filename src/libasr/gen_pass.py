@@ -36,6 +36,7 @@ passes = [
         "unique_symbols",
         "insert_deallocate",
         "promote_allocatable_to_nonallocatable"
+        "runtime_polymorphism"
 ]
 
 
