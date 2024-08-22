@@ -1253,11 +1253,13 @@ namespace LCompilers {
         std::string struct_var_name = struct_type->m_name;
         std::string struct_member_name = call_name;
         ASR::symbol_t* struct_member = struct_type->m_symtab->resolve_symbol(struct_member_name);
+        if( !struct_member ) {
+            return nullptr;
+        }
         ASR::symbol_t* struct_mem_asr_owner = ASRUtils::get_asr_owner(struct_member);
-        if( !struct_member || !struct_mem_asr_owner ||
-            !ASR::is_a<ASR::Struct_t>(*struct_mem_asr_owner) ) {
+        if( !struct_mem_asr_owner || !ASR::is_a<ASR::Struct_t>(*struct_mem_asr_owner) ) {
             throw LCompilersException(struct_member_name + " not present in " +
-                                struct_var_name + " dataclass");
+                                struct_var_name + " class");
         }
         std::string import_name = struct_var_name + "_" + struct_member_name;
         ASR::symbol_t* import_struct_member = current_scope->resolve_symbol(import_name);

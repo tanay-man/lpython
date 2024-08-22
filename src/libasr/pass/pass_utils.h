@@ -601,6 +601,9 @@ namespace LCompilers {
                     std::string call_name = "__init__";
                     ASR::symbol_t* call_sym = get_struct_member(replacer->al,type->m_derived_type, call_name,
                                                 x->base.base.loc, replacer->current_scope);
+                    if ( !call_sym ) {
+                        return;
+                    }
                     result_vec->push_back(replacer->al, ASRUtils::STMT(
                         ASRUtils::make_SubroutineCall_t_util(replacer->al,
                         x->base.base.loc, call_sym, nullptr, new_args.p, new_args.size(),
